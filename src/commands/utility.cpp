@@ -1,5 +1,6 @@
 #include <dpp/cache.h>
 #include <dpp/colors.h>
+#include <dpp/discordevents.h>
 #include <dpp/guild.h>
 #include <dpp/message.h>
 #include <dpp/presence.h>
@@ -21,6 +22,113 @@ using namespace std;
 using namespace dpp;
 using namespace skyo::command;
 
+string status_to_string(const presence_status &status) {
+    switch (status) {
+        case ps_offline:
+            return "Offline";
+        case ps_online:
+            return "Online";
+        case ps_dnd:
+            return "Do not Distrub";
+        case ps_idle:
+            return "Idle";
+        case ps_invisible:
+            return "Invisible";
+        default:
+            return "N/A (" + to_string((int)status) + ")";
+    }
+}
+
+string activity_to_string(const activity &activity) {
+    switch (activity.type) {
+        case at_game:
+            return "Playing";
+        case at_streaming:
+            return "Streaming";
+        case at_listening:
+            return "Listening to";
+        case at_watching:
+            return "Watching";
+        case at_competing:
+            return "Competing at";
+        case at_custom:
+            return activity.name;
+        default:
+            return "N/A (" + to_string((int)activity.type) + ")";
+    }
+}
+/*
+ * @value 1 is Verification Level
+ * @value 2 is MFA Level
+ * @value 3 is Content Filter
+ * @value 4 is NSFW Level
+ * */
+vector<string> security_to_string(const guild &server) {
+    vector<string> result;
+    switch (server.verification_level) {
+        case ver_low:
+            result.push_back("Low");
+            break;
+        case ver_medium:
+            result.push_back("Medium");
+            break;
+        case ver_high:
+            result.push_back("High");
+            break;
+        case ver_very_high:
+            result.push_back("Very High");
+            break;
+        default:
+            result.push_back("None");
+    }
+
+    result.push_back(server.mfa_level == mfa_elevated ? "Elevated" : "None");
+
+    switch (server.explicit_content_filter) {
+        case expl_all_members:
+            result.push_back("All Members");
+            break;
+        case expl_members_without_roles:
+            result.push_back("Members without roles");
+            break;
+        default:
+            result.push_back("Disabled");
+    }
+
+    switch (server.nsfw_level) {
+        case nsfw_age_restricted:
+            result.push_back("Age Restricted");
+            break;
+        case nsfw_explicit:
+            result.push_back("Explicit");
+            break;
+        case nsfw_safe:
+            result.push_back("Safe");
+            break;
+        default:
+            result.push_back("Default");
+    }
+
+    return result;
+}
+
+string afk_timeout_to_string(const guild_afk_timeout_t &timeout) {
+    switch (timeout) {
+        case afk_off:
+            return "Disabled";
+        case afk_60:
+            return "1 Minute";
+        case afk_300:
+            return "5 Minutes";
+        case afk_900:
+            return "15 Minutes";
+        case afk_1800:
+            return "30 Minutes";
+        default:
+            return "1 Hour";
+    }
+}
+
 namespace skyo::commands::utility {
 Command avatar = Command(
     {"avatar",
@@ -35,7 +143,7 @@ Command avatar = Command(
          embed msg_embed;
 
          usr = context.args.size() == 1
-                   ? usr = *get<shared_ptr<user>>(context.args[0].value)
+                   ? *get<shared_ptr<user>>(context.args[0].value)
                    : context.message.author;
 
          msg_embed = embed()
@@ -76,23 +184,21 @@ Command botinfo = Command(
          chrono::duration<long> uptime =
              chrono::duration_cast<chrono::seconds>(now - start_time);
 
-         ostringstream uptime_format;
+         string uptime_format;
          int days = uptime.count() / 86400;
          int hours = (uptime.count() % 86400) / 3600;
          int minutes = (uptime.count() % 3600) / 60;
          int seconds = uptime.count() % 60;
-         if (days > 0) uptime_format << days << "d ";
-         if (hours > 0) uptime_format << hours << "h ";
-         if (minutes > 0) uptime_format << minutes << "m ";
-         uptime_format << seconds << "s ";
+         if (days > 0) uptime_format += to_string(days) + "d ";
+         if (hours > 0) uptime_format += to_string(hours) + "h ";
+         if (minutes > 0) uptime_format += to_string(minutes) + "m ";
+         uptime_format += to_string(seconds) + "s ";
 
          vector<string> dev_names;
          for (auto id : cfg.config.developers) {
-             user *usr = find_user(id);
-             if (usr) {
-                 dev_names.push_back(usr->global_name);
-             } else {
-                 dev_names.push_back("Unknown");
+             if (const user *usr = find_user(id)) {
+                 usr ? dev_names.push_back(usr->global_name)
+                     : dev_names.push_back("Unknown");
              }
          }
 
@@ -105,7 +211,7 @@ Command botinfo = Command(
          info << "- **Developer:** " << utils::join(dev_names, ", ") << "\n";
          info << "- **Prefixes:** " << utils::join(cfg.config.prefix, " ")
               << "\n";
-         info << "- **Uptime:** " << uptime_format.str() << "\n";
+         info << "- **Uptime:** " << uptime_format << "\n";
          info << "- **Guilds:** " << get_guild_count() << "\n";
          info << "- **Users:** " << get_user_count() << "\n";
          info << "- **Channels:** " << get_channel_count();
@@ -147,48 +253,20 @@ Command userinfo = Command(
          long create_at = static_cast<long>(user.get_creation_time());
          auto rich_it = presence_cache.find(member.user_id);
          presence rich;
-         bool rich_available = false;
+         string status = "N/A", activities = "N/A";
          if (rich_it != presence_cache.end()) {
              rich = rich_it->second;
-             rich_available = true;
+             status = status_to_string(rich.status());
+
+             activities = string();
+             vector<string> activity;
+             for (auto in : rich.activities) {
+                 activity.push_back(activity_to_string(in) + " " + in.name);
+             }
+             activities = utils::join(activity, ", ");
          }
 
          ostringstream user_info;
-         string activities = "N/A";
-         if (rich_available) {
-             activities = string();
-             for (auto in : rich.activities) {
-                 string ty;
-                 switch (in.type) {
-                     case at_game:
-                         ty = "Playing";
-                         break;
-                     case at_streaming:
-                         ty = "Streaming";
-                         break;
-                     case at_listening:
-                         ty = "Listening to";
-                         break;
-                     case at_watching:
-                         ty = "Watching";
-                         break;
-                     case at_competing:
-                         ty = "Competing at";
-                         break;
-                     case at_custom:
-                         ty = in.name;
-                         break;
-                     default:
-                         ty = "N/A (" + to_string((int)in.type) + ")";
-                 }
-                 activities += ty + " " + in.name + ", ";
-             }
-             if (activities.length() > 2) {
-                 activities.erase(activities.length() - 2);
-             } else {
-                 activities = "N/A";
-             }
-         }
          user_info << "- **ID:** " << user.id << "\n";
          user_info << "- **Username:** " << user.username << "\n";
          user_info << "- **Created:** <t:" << create_at
@@ -207,6 +285,7 @@ Command userinfo = Command(
          for (snowflake aui : member_roles) {
              role *rl = find_role(aui);
              if (rl == nullptr) continue;
+
              if (highest_role == nullptr ||
                  rl->position > highest_role->position)
                  highest_role = rl;
@@ -214,28 +293,6 @@ Command userinfo = Command(
          }
 
          ostringstream member_info;
-         string status = "N/A";
-         if (rich_available) {
-             switch (rich.status()) {
-                 case ps_offline:
-                     status = "Offline";
-                     break;
-                 case ps_online:
-                     status = "Online";
-                     break;
-                 case ps_dnd:
-                     status = "Do not Distrub";
-                     break;
-                 case ps_idle:
-                     status = "Idle";
-                     break;
-                 case ps_invisible:
-                     status = "Invisible";
-                     break;
-                 default:
-                     status = "N/A (" + to_string((int)rich.status()) + ")";
-             }
-         }
          member_info << "- **Nickname:** "
                      << (nickname.empty() ? "-" : nickname) << "\n";
          member_info << "- **Joined:** <t:" << join_at << ":F> (<t:" << join_at
@@ -273,7 +330,9 @@ Command serverinfo = Command(
      [](const Context &context) {
          guild server = *find_guild(context.message.guild_id);
          long create_at = static_cast<long>(server.get_creation_time());
-         string owner = find_user(server.owner_id)->username;
+         user *owner_user = find_user(server.owner_id);
+         string owner =
+             owner_user ? ("<@" + to_string(owner_user->id) + ">") : "Unknown";
 
          ostringstream server_info;
          server_info << "- **ID:** " << server.id << "\n";
@@ -283,82 +342,42 @@ Command serverinfo = Command(
                      << "\n";
          server_info << "- **Created:** <t:" << create_at
                      << ":F> (<t:" << create_at << ":R>)\n";
-         server_info << "- **Owner:** " << (owner.empty() ? "Unknown" : owner)
-                     << "\n";
+         server_info << "- **Owner:** " << owner << "\n";
          server_info << "- **Region:** ";
 
          ostringstream security_info;
-         string ver_level;
-         switch (server.verification_level) {
-             case ver_low:
-                 ver_level = "Low";
-                 break;
-             case ver_medium:
-                 ver_level = "Medium";
-                 break;
-             case ver_high:
-                 ver_level = "High";
-                 break;
-             case ver_very_high:
-                 ver_level = "Very High";
-                 break;
-             default:
-                 ver_level = "None";
-         }
-         string mfa_level = mfa_elevated ? "Elevated" : "None";
+         vector<string> security_result = security_to_string(server);
+         security_info << "- **Verification Level:** " << security_result[0]
+                       << "\n";
+         security_info << "- **2FA Requirement:** " << security_result[1]
+                       << "\n";
+         security_info << "- **Content Filter:** " << security_result[2]
+                       << "\n";
+         security_info << "- **NSFW Level:** " << security_result[3];
 
-         string cnt_filter;
-         switch (server.explicit_content_filter) {
-             case expl_all_members:
-                 cnt_filter = "All Members";
-                 break;
-             case expl_members_without_roles:
-                 cnt_filter = "Members without roles";
-                 break;
-             default:
-                 cnt_filter = "Disabled";
-         }
-         string nsfw_level;
-         switch (server.nsfw_level) {
-             case nsfw_age_restricted:
-                 nsfw_level = "Age Restricted";
-                 break;
-             case nsfw_explicit:
-                 nsfw_level = "Explicit";
-                 break;
-             case nsfw_safe:
-                 nsfw_level = "Safe";
-                 break;
-             default:
-                 nsfw_level = "Default";
-         }
-         security_info << "- **Verification Level:** " << ver_level << "\n";
-         security_info << "- **2FA Requirement:** " << mfa_level << "\n";
-         security_info << "- **Content Filter:** " << cnt_filter << "\n";
-         security_info << "- **NSFW Level:** " << nsfw_level;
-
-         ostringstream member_info;
          auto members = server.members;
          int human = 0, bot = 0;
-         for (auto &member : members) {
-             user user = *find_user(member.first);
-             user.is_bot() ? bot++ : human++;
+         for (auto &[id, member] : members) {
+             if (const user *u = find_user(id)) {
+                 (u->is_bot() ? bot : human)++;
+             }
          }
 
-         member_info << "- **Humans:** " << human << "\n";
-         member_info << "- **Bot:** " << bot;
+         string member_info = "- **Humans:** " + to_string(human) +
+                              "\n- **Bot:** " + to_string(bot);
 
-         ostringstream nitro_info;
-         nitro_info << "- **Boost:** " << server.premium_subscription_count
-                    << "\n";
-         nitro_info << "- **Tier:** " << (int)server.premium_tier;
+         string nitro_info =
+             "- **Boost:** " + to_string(server.premium_subscription_count) +
+             "\n- **Tier:** " + to_string((int)server.premium_tier);
 
-         ostringstream channel_info;
          auto channels = server.channels;
          int text = 0, voice = 0, thread = 0, category = 0;
          bool run = false;
          for (snowflake ch_id : channels) {
-             channel *ch = find_channel(ch_id);
+             const channel *ch = find_channel(ch_id);
+
+             if (ch == nullptr) continue;
+
              if (ch->is_text_channel())
                  text++;
              else if (ch->is_voice_channel()) {
@@ -375,53 +394,31 @@ Command serverinfo = Command(
              else if (ch->is_category())
                  category++;
          }
+
+         ostringstream channel_info;
          channel_info << "- **Text:** " << text << "\n";
          channel_info << "- **Voice:** " << voice << "\n";
          channel_info << "- **Thread:** " << thread << "\n";
          channel_info << "- **Category:** " << category;
 
-         ostringstream afk_info;
-         string afk_timeout;
-         switch (server.afk_timeout) {
-             case afk_off:
-                 afk_timeout = "Disabled";
-                 break;
-             case afk_60:
-                 afk_timeout = "1 Minute";
-                 break;
-             case afk_300:
-                 afk_timeout = "5 Minutes";
-                 break;
-             case afk_900:
-                 afk_timeout = "15 Minutes";
-                 break;
-             case afk_1800:
-                 afk_timeout = "30 Minutes";
-                 break;
-             default:
-                 afk_timeout = "1 Hour";
-         }
-         afk_info << "- **AFK Channel:** "
-                  << (server.afk_channel_id =
-                          0 ? "Disabled" : to_string(server.afk_channel_id))
-                  << "\n";
-         afk_info << "- **AFK Timeout:** " << afk_timeout;
+         string afk_info =
+             "- **AFK Channel:** " +
+             (server.afk_channel_id == 0 ? "Disabled"
+                                         : to_string(server.afk_channel_id)) +
+             "\n- **AFK Timeout:** " +
+             afk_timeout_to_string(server.afk_timeout);
 
-         ostringstream emoji_info;
          auto emojis = server.emojis;
          int req = 0, anm = 0;
          for (snowflake emoji_id : emojis) {
-             emoji *emoji = find_emoji(emoji_id);
-             if (emoji->is_animated())
-                 anm++;
-             else
-                 req++;
+             if (const emoji *emoji = find_emoji(emoji_id)) {
+                 (emoji->is_animated() ? anm : req)++;
+             }
          }
-         emoji_info << "- **Regular:** " << req << "\n";
-         emoji_info << "- **Animated:** " << anm;
+         string emoji_info = "- **Regular:** " + to_string(req) +
+                             "\n- **Animated:** " + to_string(anm);
 
-         ostringstream roles;
-         roles << "- **Roles:** " << server.roles.size();
+         string roles = "- **Roles:** " + to_string(server.roles.size());
 
          embed emb =
              embed()
@@ -433,21 +430,21 @@ Command serverinfo = Command(
                             security_info.str())
                  .add_field(string("👥") + " Members (" +
                                 to_string(server.member_count) + ")",
-                            member_info.str())
+                            member_info)
                  .add_field(
                      string(unicode_emoji::large_blue_diamond) + " Nitro",
-                     nitro_info.str())
+                     nitro_info)
                  .add_field(string(unicode_emoji::book) +
                                 " Channels & Categories (" +
                                 to_string(server.channels.size()) + ")",
                             channel_info.str())
                  .add_field(string(unicode_emoji::crescent_moon) + " AFK",
-                            afk_info.str())
+                            afk_info)
                  .add_field(string(unicode_emoji::smile) + " Emojis (" +
                                 to_string(server.emojis.size()) + ")",
-                            emoji_info.str())
+                            emoji_info)
                  .add_field(string(unicode_emoji::performing_arts) + " Roles",
-                            roles.str())
+                            roles)
                  .set_color(colors::blue)
                  .set_footer(embed_footer().set_text(
                      "Requested by " + context.message.author.username))

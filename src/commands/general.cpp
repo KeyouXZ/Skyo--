@@ -3,7 +3,6 @@
 #include <dpp/message.h>
 #include <dpp/unicode_emoji.h>
 
-#include <cmath>
 #include <string>
 
 #include "../../include/core/command.hpp"
@@ -19,6 +18,8 @@ inline std::string category_to_string(Category cat) {
             return "GENERAL";
         case Category::DEVELOPER:
             return "DEVELOPER";
+        case Category::UTILITY:
+            return "UTILITY";
         default:
             return "UNKNOWN";
     }
@@ -33,7 +34,7 @@ Command ping =
              {},
              ContextType::All,
              [](const Context &context) {
-                 double latency = std::round(bot->rest_ping * 10) / 10;
+                 int latency = bot->rest_ping * 1000;
                  context.event.reply("Pong! " + std::to_string(latency) + "ms");
              }});
 
@@ -102,7 +103,9 @@ Command help = Command(
                      .set_color(dpp::colors::blue)
                      .set_description("Use `help <command>` for details.\n");
 
-             std::unordered_map<std::string, std::stringstream> helpList;
+             std::map<std::string,
+                      std::vector<std::pair<std::string, std::string>>>
+                 sorted_commands;
 
              for (const auto &[name, cmd] : cmds) {
                  if (cmd.category == Category::DEVELOPER) continue;
@@ -112,12 +115,18 @@ Command help = Command(
                                                ? "No description"
                                                : cmd.description;
 
-                 helpList[category] << "`" << cmd.name << "` - " << description
-                                    << "\n";
+                 sorted_commands[category].emplace_back(cmd.name, description);
              }
 
-             for (const auto &[category, commandList] : helpList) {
-                 embed.add_field(category, commandList.str(), false);
+             for (auto &[category, commands] : sorted_commands) {
+                 std::sort(commands.begin(), commands.end());
+
+                 std::ostringstream ss;
+                 for (const auto &[cmd_name, desc] : commands) {
+                     ss << "`" << cmd_name << "` - " << desc << "\n";
+                 }
+
+                 embed.add_field(category, ss.str(), false);
              }
 
              context.event.reply(
