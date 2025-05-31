@@ -12,17 +12,16 @@ else()
 endif()
 
 find_package(dpp REQUIRED)
+find_package(CURL REQUIRED)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 file(GLOB_RECURSE SOURCES
-    "${CMAKE_SOURCE_DIR}/Skyo.cpp"
     "${CMAKE_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/*/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/*/*/*.cpp"
 )
 
-#message(STATUS "SOURCES: ${SOURCES}")
 message(STATUS "Found source files:")
 foreach(SRC ${SOURCES})
     message(STATUS "  ${SRC}")
@@ -30,5 +29,5 @@ endforeach()
 
 add_executable(Skyo ${SOURCES})
 
-target_link_libraries(Skyo PRIVATE dpp::dpp)
+target_link_libraries(Skyo PRIVATE dpp::dpp CURL::libcurl)
 

@@ -1,4 +1,6 @@
+#include <dpp/snowflake.h>
 #include <dpp/unicode_emoji.h>
+#include <sys/types.h>
 
 #include "../../include/global.hpp"
 #include "../../include/parser.hpp"
@@ -34,6 +36,17 @@ void on_message_create() {
 
         if (command_it != cmds.end()) {
             const command::Command &cmd = command_it->second;
+
+            // Check Developer
+            bool is_developer = false;
+            for (snowflake d : cfg.config.developers) {
+                if (d == event.msg.author.id) {
+                    is_developer = true;
+                    break;
+                }
+            }
+            if (cmd.category == command::Category::DEVELOPER && !is_developer)
+                return;
 
             // Check Context Type
             if (cmd.context == command::ContextType::Guild &&

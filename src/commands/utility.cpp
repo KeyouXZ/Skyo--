@@ -145,15 +145,57 @@ Command userinfo = Command(
 
          // User Info
          long create_at = static_cast<long>(user.get_creation_time());
+         auto rich_it = presence_cache.find(member.user_id);
+         presence rich;
+         bool rich_available = false;
+         if (rich_it != presence_cache.end()) {
+             rich = rich_it->second;
+             rich_available = true;
+         }
 
          ostringstream user_info;
+         string activities = "N/A";
+         if (rich_available) {
+             activities = string();
+             for (auto in : rich.activities) {
+                 string ty;
+                 switch (in.type) {
+                     case at_game:
+                         ty = "Playing";
+                         break;
+                     case at_streaming:
+                         ty = "Streaming";
+                         break;
+                     case at_listening:
+                         ty = "Listening to";
+                         break;
+                     case at_watching:
+                         ty = "Watching";
+                         break;
+                     case at_competing:
+                         ty = "Competing at";
+                         break;
+                     case at_custom:
+                         ty = in.name;
+                         break;
+                     default:
+                         ty = "N/A (" + to_string((int)in.type) + ")";
+                 }
+                 activities += ty + " " + in.name + ", ";
+             }
+             if (activities.length() > 2) {
+                 activities.erase(activities.length() - 2);
+             } else {
+                 activities = "N/A";
+             }
+         }
          user_info << "- **ID:** " << user.id << "\n";
          user_info << "- **Username:** " << user.username << "\n";
          user_info << "- **Created:** <t:" << create_at
                    << ":F> (<t:" << create_at << ":R>)" << "\n";
          user_info << "- **Is Bot:** " << (user.is_bot() ? "Yes" : "No")
                    << "\n";
-         user_info << "- **Activity:** " << "N/A";
+         user_info << "- **Activity:** " << activities;
 
          // Member Info
          long join_at = static_cast<long>(member.joined_at);
@@ -173,20 +215,27 @@ Command userinfo = Command(
 
          ostringstream member_info;
          string status = "N/A";
-         /*switch (user_presence.status()) {
-             case ps_offline:
-                 status = "Offline";
-             case ps_online:
-                 status = "Online";
-             case ps_dnd:
-                 status = "Don't not Distrub";
-             case ps_idle:
-                 status = "Idle";
-             case ps_invisible:
-                 status = "Invisible";
-             default:
-                 status = "N/A";
-         }*/
+         if (rich_available) {
+             switch (rich.status()) {
+                 case ps_offline:
+                     status = "Offline";
+                     break;
+                 case ps_online:
+                     status = "Online";
+                     break;
+                 case ps_dnd:
+                     status = "Do not Distrub";
+                     break;
+                 case ps_idle:
+                     status = "Idle";
+                     break;
+                 case ps_invisible:
+                     status = "Invisible";
+                     break;
+                 default:
+                     status = "N/A (" + to_string((int)rich.status()) + ")";
+             }
+         }
          member_info << "- **Nickname:** "
                      << (nickname.empty() ? "-" : nickname) << "\n";
          member_info << "- **Joined:** <t:" << join_at << ":F> (<t:" << join_at
@@ -243,12 +292,16 @@ Command serverinfo = Command(
          switch (server.verification_level) {
              case ver_low:
                  ver_level = "Low";
+                 break;
              case ver_medium:
                  ver_level = "Medium";
+                 break;
              case ver_high:
                  ver_level = "High";
+                 break;
              case ver_very_high:
                  ver_level = "Very High";
+                 break;
              default:
                  ver_level = "None";
          }
@@ -258,8 +311,10 @@ Command serverinfo = Command(
          switch (server.explicit_content_filter) {
              case expl_all_members:
                  cnt_filter = "All Members";
+                 break;
              case expl_members_without_roles:
                  cnt_filter = "Members without roles";
+                 break;
              default:
                  cnt_filter = "Disabled";
          }
@@ -267,10 +322,13 @@ Command serverinfo = Command(
          switch (server.nsfw_level) {
              case nsfw_age_restricted:
                  nsfw_level = "Age Restricted";
+                 break;
              case nsfw_explicit:
                  nsfw_level = "Explicit";
+                 break;
              case nsfw_safe:
                  nsfw_level = "Safe";
+                 break;
              default:
                  nsfw_level = "Default";
          }
@@ -327,15 +385,20 @@ Command serverinfo = Command(
          switch (server.afk_timeout) {
              case afk_off:
                  afk_timeout = "Disabled";
+                 break;
              case afk_60:
                  afk_timeout = "1 Minute";
+                 break;
              case afk_300:
                  afk_timeout = "5 Minutes";
+                 break;
              case afk_900:
                  afk_timeout = "15 Minutes";
+                 break;
              case afk_1800:
                  afk_timeout = "30 Minutes";
-             case afk_3600:
+                 break;
+             default:
                  afk_timeout = "1 Hour";
          }
          afk_info << "- **AFK Channel:** "
