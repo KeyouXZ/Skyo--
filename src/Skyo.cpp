@@ -1,4 +1,6 @@
+#include <dpp/appcommand.h>
 #include <dpp/cache.h>
+#include <dpp/cluster.h>
 #include <dpp/dpp.h>
 #include <dpp/intents.h>
 #include <dpp/presence.h>
@@ -20,6 +22,22 @@ utils::Cooldown cooldown;
 presence_cache_t presence_cache;
 args_map_t args_value;
 
+void register_slashcommand() {
+    skyo::bot->on_slashcommand([](const dpp::slashcommand_t& event) {
+        if (event.command.get_command_name() == "ping") {
+            event.reply("Pong! " + to_string((int)bot->rest_ping * 1000) +
+                        "ms");
+        }
+    });
+
+    skyo::bot->on_ready([](const dpp::ready_t& _) {
+        if (dpp::run_once<struct register_bot_commands>()) {
+            skyo::bot->global_command_create(
+                dpp::slashcommand("ping", "Ping pong!", bot->me.id));
+        }
+    });
+}
+
 void start() {
     skyo::cfg = skyo::config::read();
     skyo::bot = new dpp::cluster(skyo::cfg.config.token, dpp::i_all_intents);
@@ -32,6 +50,9 @@ void start() {
 
     // Register commands & aliases
     skyo::registry::init();
+
+    // Register slash commands
+    skyo::register_slashcommand();
 
     skyo::bot->start(dpp::st_wait);
 }
