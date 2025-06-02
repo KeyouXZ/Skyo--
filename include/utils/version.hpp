@@ -1,7 +1,7 @@
 #pragma once
 #include <dpp/dpp.h>
 
-#define VERSION "0.1.0"
+#define VERSION "0.2.0"
 
 namespace skyo::utils {
 std::string get_local_version();
