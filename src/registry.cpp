@@ -1,3 +1,4 @@
+#include "../include/commands/developer.hpp"
 #include "../include/commands/general.hpp"
 #include "../include/commands/utility.hpp"
 #include "../include/global.hpp"
@@ -15,6 +16,8 @@ void init() {
     cmds[utility::botinfo.name] = utility::botinfo;
     cmds[utility::userinfo.name] = utility::userinfo;
     cmds[utility::serverinfo.name] = utility::serverinfo;
+
+    cmds[developer::pres.name] = developer::pres;
 
     // register aliases
     for (const auto& [name, cmd] : cmds) {

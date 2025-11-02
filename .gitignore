@@ -2,3 +2,4 @@ build/
 .cache/
 backup/
 configs/
+bot.log
